@@ -3,7 +3,6 @@
     <ul class="nav nav-tabs">
       <li :class="tabClass('Home')"><router-link :to="{'name': 'Home'}">Home</router-link></li>
       <li :class="tabClass('Yolo')"><router-link :to="{'name': 'Yolo'}">Tiny YOLOv2</router-link></li>
-      <li :class="tabClass('YoloWebCam')"><router-link :to="{'name': 'YoloWebCam'}">Tiny Yolo (WebCam)</router-link></li>
     </ul>
     <div id="app">
       <router-view></router-view>

@@ -8,7 +8,7 @@ const YOLO_ANCHORS = [
 ];
 
 export default {
-  modelUrl: "https://raw.githubusercontent.com/MikeShi42/yolo-tiny-tfjs/master/model2.json",
+  modelUrl: "https://raw.githubusercontent.com/syshen/tfjs-models/master/Yolov2-Tiny/model.json",
   size: {
     width: 416,
     height: 416

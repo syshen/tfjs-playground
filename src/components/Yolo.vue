@@ -17,6 +17,7 @@
       </div>
       <div class="col-md-6 ">
         <canvas id="canvas"></canvas>
+        <div id="overlay"></div>
       </div>
     </div>
   </div>
@@ -69,9 +70,12 @@ export default {
             } else {
               width = 416 * img.width / img.height
             }
-            console.log('image drew')
             canvas.width = width
             canvas.height = height
+            
+            canvas.setAttribute('style', `width: ${width}px; height: ${height}px`)
+            var overlay = document.getElementById('overlay')
+            overlay.setAttribute('style', `width: ${width}px; height: ${height}px`)
             ctx.drawImage(img, 0, 0, width, height)
             resolve()
           }
@@ -89,6 +93,8 @@ export default {
 
       const transfer = ev.dataTransfer
       if (transfer.files.length > 0) {
+        this.clearBBox()
+
         this.drawImage(transfer.files[0])
         .then(() => tf.nextFrame)
         .then(() => {
@@ -108,26 +114,45 @@ export default {
 
     },
 
-    drawBBox: function(canvas, box, label, confidence) {
-      const ctx = canvas.getContext('2d')
-      ctx.lineWidth = "1"
-      ctx.strokeStyle = "#ffffff"
+    drawBBox: function(canvas, box, classLabel, confidence) {
+      // const ctx = canvas.getContext('2d')
+      // ctx.lineWidth = "1"
+      // ctx.strokeStyle = "#ffffff"
       let scaleX = canvas.width / yolo.size.width 
       let scaleY = canvas.height / yolo.size.height 
 
-      let x = Math.max(box[0] * 416 + (canvas.width - yolo.size.width) / 2, 0)
-      let y = Math.max(box[1] * 416 + (canvas.height - yolo.size.height) / 2, 0)
-      let w = Math.min(box[2] * 416, 416)
-      let h = Math.min(box[3] * 416, 416)
+      let x = Math.max(box[0] * yolo.size.width + (canvas.width - yolo.size.width) / 2, 0)
+      let y = Math.max(box[1] * yolo.size.height + (canvas.height - yolo.size.height) / 2, 0)
+      let w = Math.min(box[2] * yolo.size.width, yolo.size.width)
+      let h = Math.min(box[3] * yolo.size.height, yolo.size.height)
       
-      console.log(x, y, w, h)
-      console.log(label + ":" + confidence)
+      /*
       ctx.rect(x, y, w, h)
       ctx.stroke()
 
       ctx.font = "20px Arial"
       ctx.fillStyle = "#fff"
-      ctx.fillText(label, x, y - 10)
+      ctx.fillText(classLabel, x, y - 10)
+      */
+      const bbox = document.createElement('div')
+      bbox.classList.add('bbox')
+      bbox.setAttribute('style', `top: ${y}px; left: ${x}px; width: ${w}px; height: ${h}px`)
+
+      const label = document.createElement('div')
+      label.classList.add('label')
+      label.innerText = classLabel
+      bbox.appendChild(label)
+
+      const overlay = document.getElementById('overlay')
+      overlay.setAttribute('style', `left: ${canvas.offsetLeft}px`)
+      overlay.appendChild(bbox)
+    },
+
+    clearBBox: function() {
+      const overlay = document.getElementById('overlay')
+      while (overlay.firstChild) {
+        overlay.removeChild(overlay.firstChild)
+      }
     },
 
     detect: async function() {
@@ -136,12 +161,13 @@ export default {
       
       const x = yolo.toTensor(canvas)
 
-      this.sendLog("Start detecting")
+      this.sendLog("> Begin detecting")
       var t0 = performance.now()
 
+      console.log(self.model)
       const result = self.model.predict(x)
       
-      this.sendLog("Finish detecting (" + (performance.now() - t0) / 1000 + " seconds)")
+      this.sendLog("< End detecting (" + (performance.now() - t0) / 1000 + " seconds)")
       this.sendLog("-------")
       
       await tf.nextFrame()
@@ -151,29 +177,34 @@ export default {
       await tf.nextFrame()
       t0 = performance.now()
 
-      let predictions = yolo.computeBoundingBoxes(result)
+      const detections = yolo.computeBoundingBoxes(result)
       
       this.sendLog("< Computing bounding boxes (" + (performance.now() - t0) / 1000 + " seconds)")
       this.sendLog("-------")
 
       await tf.nextFrame()
 
-      let classes = await predictions[0].data()
-      let scores = await predictions[1].data()
-      let boxes = await predictions[2].data()
+      if (detections[0] === null) {
+        this.sendLog("Detect nothing");
+        return;
+      }
 
-      this.sendLog("> non-max-suppression")
+      let classes = await detections[0].data()
+      let scores = await detections[1].data()
+      let boxes = await detections[2].data()
+
+      this.sendLog("> Non-max-suppression")
       t0 = performance.now()
       
-      const selected = await yolo.nonMaxSuppression(scores, boxes)
+      const selected = yolo.nonMaxSuppression(scores, boxes)
         
-      this.sendLog("< non-max-suppression: (" + (performance.now() - t0) / 1000 + " seconds)")
+      this.sendLog("< Non-max-suppression: (" + (performance.now() - t0) / 1000 + " seconds)")
       this.sendLog("Number of boxes detected:" + selected.length)
       this.sendLog("-------")
 
       await tf.nextFrame()
 
-      this.sendLog("Drawing boxes")
+      this.sendLog("> Begin drawing boxes")
       
       await tf.nextFrame()
 
@@ -184,7 +215,7 @@ export default {
         self.drawBBox(canvas, p[1], className, confidence)
       })
 
-      this.sendLog("Done")
+      this.sendLog("< Done")
     },
 
     start: function() {
@@ -194,10 +225,10 @@ export default {
         this.detect()
       } else {
         var t0 = performance.now()
-        this.sendLog("Loading model file")
+        this.sendLog("> Load model file")
         tf.loadModel(yolo.modelUrl).then(model => {
           var elapsed = (performance.now() - t0)/1000
-          self.sendLog("Model file was loaded (" + elapsed + " seconds)")
+          self.sendLog("< Model file was loaded (" + elapsed + " seconds)")
           self.sendLog("-------")
 
           self.model = model
@@ -253,4 +284,29 @@ export default {
 canvas {
   width: 100%;
 }
+
+#overlay {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+}
+</style>
+
+<style>
+.bbox {
+  position: absolute;
+  border: 2px solid white;
+
+}
+
+.bbox .label {
+  font-size: 14px;
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  background-color: white;
+  color: black;
+  border-radius: 0em;
+}
+
 </style>
